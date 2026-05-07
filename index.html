@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>伏地挺身計數器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700;900&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --accent: #00E5FF;
+    --hot: #FF6B00;
+    --danger: #FF1A1A;
+    --gold: #FFD700;
+    --bg: #080808;
+    --surface: #101010;
+    --border: #1c1c1c;
+    --muted: #3a3a3a;
+    --label: #555;
+  }
+
+  html, body {
+    height: 100%; background: var(--bg);
+    color: #f0f0f0;
+    font-family: 'Noto Sans TC', sans-serif;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+
+  #app {
+    height: 100vh; height: 100dvh;
+    display: flex; flex-direction: column;
+  }
+
+  /* ── TOP STATS ── */
+  #top {
+    padding: 44px 28px 10px;
+    display: flex; justify-content: space-between; align-items: flex-end;
+    flex-shrink: 0;
+  }
+  .stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .stat-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--label);
+  }
+  .stat-num {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 80px; font-weight: 900; line-height: 1;
+    font-variant-numeric: tabular-nums; transition: color 0.3s;
+  }
+  #timer-num { color: #f0f0f0; }
+  #timer-num.warn { color: var(--hot); }
+  #timer-num.danger { color: var(--danger); }
+  #score-num { color: var(--accent); }
+
+  /* ── PROGRESS BAR ── */
+  #bar-wrap { margin: 4px 28px 8px; height: 4px; background: #181818; border-radius: 2px; overflow: hidden; flex-shrink: 0; }
+  #bar { height: 100%; width: 100%; background: var(--accent); border-radius: 2px; transition: width 0.95s linear, background 0.3s; }
+
+  /* ── BRIGHTNESS METER ── */
+  #bright-wrap {
+    margin: 0 28px 8px;
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  #bright-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.15em;
+    text-transform: uppercase; color: var(--label); white-space: nowrap;
+  }
+  #bright-bar-wrap { flex: 1; height: 6px; background: #181818; border-radius: 3px; overflow: hidden; }
+  #bright-bar { height: 100%; width: 50%; background: #444; border-radius: 3px; transition: width 0.08s, background 0.15s; }
+  #bright-val {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px; font-weight: 700; color: #555; min-width: 32px; text-align: right;
+  }
+
+  /* ── HISTORY ── */
+  #history {
+    padding: 4px 28px 8px; display: flex; align-items: center;
+    gap: 8px; flex-wrap: wrap; flex-shrink: 0; min-height: 34px;
+  }
+  .h-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.15em;
+    text-transform: uppercase; color: var(--muted); margin-right: 2px;
+  }
+  .h-chip {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 14px; font-weight: 700;
+    background: #141414; border: 0.5px solid #252525;
+    color: #777; padding: 2px 10px; border-radius: 20px;
+  }
+  .h-chip.best { border-color: var(--gold); color: var(--gold); }
+  #hist-empty { font-size: 12px; color: var(--muted); }
+
+  /* ── MAIN ZONE ── */
+  #main-zone {
+    flex: 1; position: relative;
+    background: var(--surface);
+    border-top: 0.5px solid var(--border);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    overflow: hidden; gap: 20px;
+  }
+
+  /* camera preview */
+  #cam-ring {
+    width: 180px; height: 180px; border-radius: 50%;
+    position: relative; flex-shrink: 0;
+  }
+  #cam-ring::before {
+    content: '';
+    position: absolute; inset: -3px;
+    border-radius: 50%;
+    background: conic-gradient(var(--accent) 0%, var(--hot) 50%, var(--accent) 100%);
+    animation: spin 4s linear infinite;
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+  #cam-ring.active::before { opacity: 1; }
+  #cam-ring::after {
+    content: '';
+    position: absolute; inset: 3px;
+    border-radius: 50%;
+    background: var(--surface);
+  }
+  #cam-preview {
+    position: absolute; inset: 6px;
+    border-radius: 50%; overflow: hidden; z-index: 1;
+    background: #000;
+  }
+  video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+  canvas { display: none; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* state label */
+  #state-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 16px; font-weight: 700; letter-spacing: 0.15em;
+    text-transform: uppercase; color: var(--label);
+    text-align: center;
+  }
+
+  /* flash overlay on score */
+  #flash {
+    position: absolute; inset: 0;
+    background: rgba(0,229,255,0.12);
+    opacity: 0; pointer-events: none;
+    border-radius: inherit;
+  }
+  #flash.pop { animation: flash-pop 0.25s ease-out forwards; }
+  @keyframes flash-pop { 0%{opacity:1} 100%{opacity:0} }
+
+  /* floating controls */
+  #controls {
+    position: absolute; top: 14px; right: 14px;
+    display: flex; gap: 8px; z-index: 5;
+  }
+  .ctrl-btn {
+    padding: 7px 14px;
+    background: #1a1a1a; color: #888;
+    border: 0.5px solid #2a2a2a;
+    border-radius: 50px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px; font-weight: 700;
+    cursor: pointer; display: none;
+  }
+  .ctrl-btn.show { display: block; }
+  .ctrl-btn:active { transform: scale(0.95); }
+
+  /* start button */
+  #start-btn {
+    padding: 14px 44px;
+    background: linear-gradient(135deg, var(--hot), var(--danger));
+    color: #fff; border: none; border-radius: 50px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px; font-weight: 900; letter-spacing: 0.08em;
+    cursor: pointer;
+  }
+  #start-btn:active { transform: scale(0.96); }
+
+  /* ── END OVERLAY ── */
+  #end-overlay {
+    display: none; position: absolute; inset: 0;
+    background: rgba(0,0,0,0.93);
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; z-index: 20;
+  }
+  #end-overlay.show { display: flex; }
+  #end-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 14px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase; color: #666;
+  }
+  #end-score {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 100px; font-weight: 900;
+    color: var(--accent); line-height: 1;
+  }
+  #end-best { font-size: 14px; color: var(--gold); min-height: 20px; }
+  #end-reset {
+    margin-top: 16px; padding: 14px 44px;
+    background: var(--hot); color: #fff; border: none; border-radius: 50px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 20px; font-weight: 700; letter-spacing: 0.06em; cursor: pointer;
+  }
+  #end-reset:active { transform: scale(0.96); }
+
+  /* sensitivity control */
+  #sens-wrap {
+    position: absolute; bottom: 16px; left: 0; right: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 0 32px;
+  }
+  #sens-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.15em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  #sens-row { display: flex; align-items: center; gap: 10px; width: 100%; }
+  #sens-slider { flex: 1; accent-color: var(--hot); }
+  #sens-val {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px; font-weight: 700; color: #666; min-width: 28px;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="top">
+    <div class="stat">
+      <div class="stat-label">倒數</div>
+      <div class="stat-num" id="timer-num">60</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">下數</div>
+      <div class="stat-num" id="score-num">0</div>
+    </div>
+  </div>
+
+  <div id="bar-wrap"><div id="bar"></div></div>
+
+  <div id="bright-wrap">
+    <div id="bright-label">亮度</div>
+    <div id="bright-bar-wrap"><div id="bright-bar"></div></div>
+    <div id="bright-val">—</div>
+  </div>
+
+  <div id="history">
+    <span class="h-label">紀錄</span>
+    <span id="hist-empty">尚無紀錄</span>
+  </div>
+
+  <div id="main-zone">
+    <div id="controls">
+      <button class="ctrl-btn" id="reset-btn" onclick="resetGame()">再來一次</button>
+    </div>
+
+    <div id="cam-ring">
+      <div id="cam-preview">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas"></canvas>
+      </div>
+    </div>
+
+    <div id="state-label">手機平放，臉朝下靠近鏡頭</div>
+
+    <button id="start-btn" onclick="startSession()">開始偵測</button>
+
+    <div id="sens-wrap">
+      <div id="sens-label">靈敏度（遮光門檻）</div>
+      <div id="sens-row">
+        <span style="font-size:11px;color:var(--muted)">低</span>
+        <input id="sens-slider" type="range" min="10" max="80" value="40" oninput="updateSens(this.value)">
+        <span style="font-size:11px;color:var(--muted)">高</span>
+        <div id="sens-val">40</div>
+      </div>
+    </div>
+
+    <div id="flash"></div>
+
+    <div id="end-overlay">
+      <div id="end-title">完成！最終下數</div>
+      <div id="end-score">0</div>
+      <div id="end-best"></div>
+      <button id="end-reset" onclick="resetGame()">再來一次</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const TOTAL = 60;
+let remaining = TOTAL, score = 0, started = false, ticker = null;
+let history = [];
+let audioCtx = null;
+let stream = null;
+let animFrame = null;
+let lastBright = 255;
+let cooldown = false;
+let wasDown = false;
+let threshold = 40; // brightness drop threshold (0-255)
+let sensitivity = 40; // slider value (maps to threshold)
+
+// ── Audio ──
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+function playTick() {
+  try {
+    const c = getCtx(), now = c.currentTime;
+    const osc = c.createOscillator(), gain = c.createGain(), bpf = c.createBiquadFilter();
+    bpf.type = 'bandpass'; bpf.frequency.value = 1800; bpf.Q.value = 2.5;
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1600, now);
+    osc.frequency.exponentialRampToValueAtTime(900, now + 0.06);
+    gain.gain.setValueAtTime(0.55, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+    osc.connect(bpf); bpf.connect(gain); gain.connect(c.destination);
+    osc.start(now); osc.stop(now + 0.09);
+  } catch(e) {}
+}
+function playEnd() {
+  try {
+    const c = getCtx(), now = c.currentTime;
+    [0, 0.13, 0.28].forEach((t, i) => {
+      const osc = c.createOscillator(), gain = c.createGain();
+      osc.type = 'sine'; osc.frequency.value = [523, 415, 330][i];
+      gain.gain.setValueAtTime(0.4, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.2);
+      osc.connect(gain); gain.connect(c.destination);
+      osc.start(now + t); osc.stop(now + t + 0.22);
+    });
+  } catch(e) {}
+}
+
+// ── DOM ──
+const timerEl   = document.getElementById('timer-num');
+const scoreEl   = document.getElementById('score-num');
+const barEl     = document.getElementById('bar');
+const stateEl   = document.getElementById('state-label');
+const startBtn  = document.getElementById('start-btn');
+const resetCtrl = document.getElementById('reset-btn');
+const camRing   = document.getElementById('cam-ring');
+const overlay   = document.getElementById('end-overlay');
+const endScEl   = document.getElementById('end-score');
+const endBstEl  = document.getElementById('end-best');
+const histPanel = document.getElementById('history');
+const histEmpty = document.getElementById('hist-empty');
+const flashEl   = document.getElementById('flash');
+const brightBar = document.getElementById('bright-bar');
+const brightVal = document.getElementById('bright-val');
+const video     = document.getElementById('video');
+const canvas    = document.getElementById('canvas');
+
+// ── Sensitivity ──
+function updateSens(v) {
+  sensitivity = parseInt(v);
+  document.getElementById('sens-val').textContent = v;
+  // map slider 10-80 → brightness threshold 100-30 (inverse: higher sens = lower threshold needed)
+  threshold = Math.round(110 - sensitivity);
+}
+updateSens(40);
+
+// ── Camera ──
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: 160, height: 160 },
+      audio: false
+    });
+    video.srcObject = stream;
+    camRing.classList.add('active');
+    return true;
+  } catch(e) {
+    stateEl.textContent = '⚠️ 無法取得鏡頭權限';
+    return false;
+  }
+}
+
+function getBrightness() {
+  const ctx2d = canvas.getContext('2d');
+  canvas.width = 40; canvas.height = 40;
+  ctx2d.drawImage(video, 0, 0, 40, 40);
+  const data = ctx2d.getImageData(10, 10, 20, 20).data;
+  let sum = 0, count = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    sum += (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114);
+    count++;
+  }
+  return count > 0 ? sum / count : 128;
+}
+
+function analyzeFrame() {
+  if (!started || remaining <= 0) return;
+  const bright = getBrightness();
+
+  // update meter
+  const pct = Math.round((bright / 255) * 100);
+  brightBar.style.width = pct + '%';
+  brightBar.style.background = bright < threshold ? '#FF1A1A' : bright < threshold + 30 ? '#FF6B00' : '#00E5FF';
+  brightVal.textContent = Math.round(bright);
+
+  // state machine: detect down (dark) → up (bright) transition
+  const isDown = bright < threshold;
+  if (isDown && !wasDown) {
+    wasDown = true;
+    stateEl.textContent = '⬇️ 靠近中...';
+  } else if (!isDown && wasDown && !cooldown) {
+    // completed one pushup
+    wasDown = false;
+    cooldown = true;
+    addScore();
+    setTimeout(() => { cooldown = false; }, 500);
+  }
+
+  animFrame = requestAnimationFrame(analyzeFrame);
+}
+
+// ── Session ──
+async function startSession() {
+  const ok = await startCamera();
+  if (!ok) return;
+  startBtn.style.display = 'none';
+  resetCtrl.classList.add('show');
+  stateEl.textContent = '手機平放，臉朝下靠近鏡頭';
+  started = true;
+  ticker = setInterval(() => {
+    remaining--;
+    timerEl.textContent = remaining;
+    updateTimerColor();
+    updateBar();
+    if (remaining <= 0) { clearInterval(ticker); endGame(); }
+  }, 1000);
+  animFrame = requestAnimationFrame(analyzeFrame);
+}
+
+function addScore() {
+  playTick();
+  score++;
+  scoreEl.textContent = score;
+  stateEl.textContent = '✅ 計一下！';
+  flashEl.classList.remove('pop');
+  void flashEl.offsetWidth;
+  flashEl.classList.add('pop');
+  setTimeout(() => { stateEl.textContent = '⬆️ 撐起來繼續'; }, 600);
+}
+
+function updateBar() {
+  barEl.style.width = (remaining / TOTAL * 100) + '%';
+  barEl.style.background = remaining <= 10 ? '#FF1A1A' : remaining <= 20 ? '#FF6B00' : '#00E5FF';
+}
+function updateTimerColor() {
+  timerEl.classList.remove('warn','danger');
+  if (remaining <= 10) timerEl.classList.add('danger');
+  else if (remaining <= 20) timerEl.classList.add('warn');
+}
+
+function endGame() {
+  playEnd();
+  cancelAnimationFrame(animFrame);
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  camRing.classList.remove('active');
+
+  history.unshift(score);
+  if (history.length > 6) history = history.slice(0, 6);
+  renderHistory();
+  endScEl.textContent = score;
+  const best = Math.max(...history);
+  endBstEl.textContent = score === best && history.length > 1 ? '🏆 新紀錄！' : '最高：' + best;
+  overlay.classList.add('show');
+  resetCtrl.classList.remove('show');
+}
+
+function renderHistory() {
+  histEmpty.style.display = 'none';
+  histPanel.querySelectorAll('.h-chip').forEach(c => c.remove());
+  const best = Math.max(...history);
+  history.forEach((s, i) => {
+    const el = document.createElement('span');
+    el.className = 'h-chip' + (s === best ? ' best' : '');
+    el.textContent = (i === 0 ? '★ ' : '') + s;
+    histPanel.appendChild(el);
+  });
+}
+
+function resetGame() {
+  clearInterval(ticker);
+  cancelAnimationFrame(animFrame);
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+
+  remaining = TOTAL; score = 0; started = false; wasDown = false; cooldown = false;
+  timerEl.textContent = TOTAL;
+  timerEl.classList.remove('warn','danger');
+  scoreEl.textContent = 0;
+  barEl.style.width = '100%'; barEl.style.background = '#00E5FF';
+  brightBar.style.width = '50%'; brightBar.style.background = '#444';
+  brightVal.textContent = '—';
+  stateEl.textContent = '手機平放，臉朝下靠近鏡頭';
+  camRing.classList.remove('active');
+  video.srcObject = null;
+  startBtn.style.display = '';
+  resetCtrl.classList.remove('show');
+  overlay.classList.remove('show');
+}
+</script>
+</body>
+</html>
